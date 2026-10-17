@@ -1,0 +1,5 @@
+*.pt binary
+*.cubin binary
+*.so binary
+*.npz binary
+*.ipynb -diff

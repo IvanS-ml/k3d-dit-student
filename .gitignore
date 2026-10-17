@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+# local data and outputs of the reproduction steps
+/data/
+/runs/
+/targets/
+/out/
+/k3d_submission.zip
+*.tmp.npz
+.DS_Store

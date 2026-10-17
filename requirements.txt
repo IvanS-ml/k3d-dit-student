@@ -1,0 +1,7 @@
+# solution/ (inference) and training/: CPU or CUDA build of torch; the organizers' container already has both
+torch>=2.1
+numpy>=1.24
+# engine/build.sh only (rebuilding the cubins without a CUDA toolkit):
+#   nvidia-cuda-nvrtc-cu12==12.4.127
+# teacher/ (teacher targets) needs the baseline repository 3dgen-main and its dependencies; on Kaggle the notebook
+# teacher/k3d_02_teacher_targets.ipynb installs them (cell 1)
