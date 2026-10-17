@@ -1,0 +1,28 @@
+{
+ "samples": 555,
+ "voxels": 5680469,
+ "dtype": "float16",
+ "new": 555,
+ "data": "public_test",
+ "device": "cpu",
+ "hardware": "cpu aarch64",
+ "path": "torch",
+ "protocol": "stub",
+ "torch": "2.6.0+cpu",
+ "python": "3.10.12",
+ "solution_md5": "ed2e33c46335a3a590995e33ec59fb4d",
+ "student_md5": "905a47da58ff37ed19a3e41c106eb812",
+ "student": {
+  "hidden": 16,
+  "feats": [
+   "occ",
+   "pos"
+  ],
+  "vm_mode": "global"
+ },
+ "src_tag": "1e6f949c6c6b",
+ "load_s": 0.0,
+ "generate_s_new": 1.44,
+ "check_vs_reference": null,
+ "created": "2026-10-17 10:43:15"
+}
