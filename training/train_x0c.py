@@ -10,7 +10,8 @@ machines / thread counts).
 At the end: per-object validation rel MSE + variance-matching statistics (per-channel std ratio target / prediction on
 200k training voxels) -> <run>/student.pt (format k3d-student-v1, read by solution/solution.py).
 The shipped solution/weights/student.pt came from the original run of this script (same settings, unseeded
-initialization, two calls of 43 982 + 16 018 steps): val x0c rel MSE 0.5805."""
+initialization, two calls of 43 982 + 16 018 steps): val x0c rel MSE 0.5805. Its vm_scale is then multiplied by 1.45
+(output-scale multiplier, info["vm_scale_mult"]): tools/make_submission.py --student <run>/student.pt --scale-mult 1.45."""
 import argparse
 import json
 import time

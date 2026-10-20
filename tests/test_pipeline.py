@@ -6,8 +6,10 @@
 
 Checks: the training features (packed occupancy + pos, as stored by the data scripts) equal the features of the
 inference reference path bit for bit; the latents of the packed solution equal the training-time model (PyTorch
-Sequential + variance matching as exported) on every voxel; tools/make_test_latents.py writes the same latents.
+Sequential + variance matching as exported) on every voxel; --scale-mult K multiplies the output spread around the mean
+by K and is idempotent; tools/make_test_latents.py writes the same latents.
 usage: python tests/test_pipeline.py"""
+import io
 import json
 import shutil
 import subprocess
@@ -113,6 +115,26 @@ for sid in ids:
     worst = max(worst, err)
     assert err < 1e-5, (sid, err)
 print(f"packed solution == training-time model: max rel diff {worst:.1e}")
+
+# 2b) --scale-mult K (the final submission uses K = 1.45): vm_scale * K, output = mean + K (output - mean), idempotent
+zk = tmp / "sub_k.zip"
+run(ROOT / "tools" / "make_submission.py", "--student", runs / "student.pt", "--scale-mult", 1.45, "--out", zk)
+with zipfile.ZipFile(zk) as z:
+    kbytes = z.read("weights/student.pt")
+    z.extractall(tmp / "sub_k")
+mk = torch.load(io.BytesIO(kbytes), weights_only=True)
+assert torch.equal(mk["vm_scale"], m["vm_scale"].float() * 1.45) and mk["info"]["vm_scale_mult"] == 1.45
+(tmp / "student_k.pt").write_bytes(kbytes)
+run(ROOT / "tools" / "make_submission.py", "--student", tmp / "student_k.pt", "--scale-mult", 1.45, "--out", tmp / "k2.zip")
+assert zipfile.ZipFile(tmp / "k2.zip").read("weights/student.pt") == kbytes  # replaced, not compounded
+solk = load_solution_module(tmp / "sub_k" / "solution.py").Solution.from_pretrained(str(tmp / "sub_k" / "weights"),
+                                                                                   device="cpu")
+mu = m["vm_mean"].float()
+for sid in ids:
+    vt = torch.tensor(np.load(inputs / sid / "cache" / "vox_idxi.npz")["vox_idxi"], dtype=torch.int32)
+    o1, ok = sol.generate_impl([vt])[0], solk.generate_impl([vt])[0]
+    assert torch.allclose(ok, mu + (o1 - mu) * 1.45, rtol=0, atol=1e-5 * float(ok.abs().max())), sid
+print("make_submission --scale-mult 1.45: vm_scale x1.45, output = mean + 1.45 (output - mean), idempotent")
 
 # 3) make_test_latents
 lat = tmp / "latents"

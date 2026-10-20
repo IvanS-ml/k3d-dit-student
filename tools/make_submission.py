@@ -1,12 +1,16 @@
 """Build the leaderboard submission zip from this repository.
 
 usage: python tools/make_submission.py [--student solution/weights/student.pt] [--vm global|object|none]
-                                       [--out k3d_submission.zip] [--config '{"flags": ["dlpack", "launch_first"]}']
-                                       [--official-repo path/to/3dgen-main]
+                                       [--scale-mult K] [--out k3d_submission.zip]
+                                       [--config '{"flags": ["dlpack", "launch_first"]}'] [--official-repo path/to/3dgen-main]
 Zip = solution.py + weights/{student.pt, k3d_<SRC_TAG>_sm_{75,80,86,89,90}.cubin, k3d_shim7_x86_64.so,
 k3d_fast9_x86_64.abi3.so} (+ weights/k3d_engine.json with --config). With the defaults the members are byte-identical to
-solution/ (= the submitted k3d_sub_v9_n16g.zip). A newly trained student (training/train_x0c.py -> runs/<name>/student.pt)
-is packed with --student; --vm overrides its variance-matching mode (the file is then re-serialized).
+solution/ (= the final submission k3d_sub_v9_n16g_k145.zip). A newly trained student (training/train_x0c.py ->
+runs/<name>/student.pt) is packed with --student; --vm overrides its variance-matching mode; --scale-mult K sets the
+output-scale multiplier: vm_scale = fitted vm_scale * K, so output = vm_mean + (raw - vm_mean) * vm_scale * K (K = 1.45
+in the final submission, selected by LPIPS in K3D-12; K3D-13 / K = 1.7: docs/NOTES.md). Idempotent: the multiplier
+already in the file, info["vm_scale_mult"], is replaced, not compounded. With --vm or --scale-mult the file is
+re-serialized.
 Checks: cubins for the CUDA source tag of solution.py, the shim / fast-path extension names solution.py loads, the zip
 layout (the official inspect_zip with --official-repo, an equivalent check otherwise), and that the student loads and
 runs from the unpacked zip on the reference path (CPU)."""
@@ -46,6 +50,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--student", default=str(SOLUTION_DIR / "weights" / "student.pt"))
     ap.add_argument("--vm", choices=("global", "object", "none"), default=None)
+    ap.add_argument("--scale-mult", type=float, default=None, help="output-scale multiplier K (vm_scale * K)")
     ap.add_argument("--out", default=str(ROOT / "k3d_submission.zip"))
     ap.add_argument("--config", default=None, help='weights/k3d_engine.json, e.g. \'{"mode": "fused"}\'')
     ap.add_argument("--official-repo", default=None, help="3dgen-main (for inspect_zip and the real protocol)")
@@ -56,8 +61,17 @@ def main() -> None:
     student, out = Path(a.student), Path(a.out)
 
     m = torch.load(student, map_location="cpu", weights_only=True)
+    changed = False
     if a.vm is not None and a.vm != m.get("vm_mode"):
         m["vm_mode"] = a.vm
+        changed = True
+    k0 = float(m.get("info", {}).get("vm_scale_mult", 1.0))
+    if a.scale_mult is not None and a.scale_mult != k0:
+        assert a.scale_mult > 0, a.scale_mult
+        m["vm_scale"] = m["vm_scale"].float() / k0 * a.scale_mult
+        m["info"] = dict(m.get("info", {}), vm_scale_mult=float(a.scale_mult))
+        changed = True
+    if changed:
         buf = io.BytesIO()
         torch.save(m, buf)
         student_bytes = buf.getvalue()
@@ -93,7 +107,8 @@ def main() -> None:
         assert o.shape == (v.shape[0], 16) and torch.isfinite(o).all()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    print(f"{out}: {out.stat().st_size / 2**20:.2f} MiB | student {student} H={m['hidden']} vm={m['vm_mode']} | "
+    print(f"{out}: {out.stat().st_size / 2**20:.2f} MiB | student {student} H={m['hidden']} vm={m['vm_mode']} "
+          f"x{float(m.get('info', {}).get('vm_scale_mult', 1.0)):g} | "
           f"src {S.SRC_TAG} | {how} ok | loads and runs on CPU")
     for name, data in files.items():
         print(f"  {name:45s} {len(data):>8d}  md5 {hashlib.md5(data).hexdigest()}")
